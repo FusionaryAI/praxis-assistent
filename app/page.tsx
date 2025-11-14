@@ -10,7 +10,7 @@ export default function Home() {
       </p>
 
       <Link
-        href="/demo/praxis-assistent"
+        href="/demo/hausarzt-painten"
         className="border border-white/40 rounded-lg px-4 py-2 text-base hover:bg-white hover:text-black transition"
       >
         Chatbot öffnen
