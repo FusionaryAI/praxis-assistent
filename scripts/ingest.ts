@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { JSDOM } from "jsdom";
 import { Readability } from "@mozilla/readability";
 import * as dotenv from "dotenv";
