@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useParams } from "next/navigation";
+import ReactMarkdown from "react-markdown";
 
 type Message = { role: "user" | "assistant"; text: string };
 
@@ -44,9 +45,13 @@ export default function DemoPage() {
       if (!res.ok) throw new Error("Fehler bei der Anfrage.");
 
       const data = await res.json();
+
       setMessages((m) => [
         ...m,
-        { role: "assistant", text: data.text ?? "Keine Antwort." },
+        {
+          role: "assistant",
+          text: data.text ?? "Keine Antwort.",
+        },
       ]);
     } catch (err) {
       setMessages((m) => [
@@ -61,17 +66,9 @@ export default function DemoPage() {
     }
   }
 
-  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      send();
-    }
-  }
-
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
       <div className="mx-auto flex max-w-6xl flex-col gap-8 px-4 py-8 lg:py-12">
-
         {/* --- Header --- */}
         <header className="flex flex-col justify-between gap-4 border-b border-slate-200 pb-6 sm:flex-row sm:items-end">
           <div>
@@ -102,7 +99,6 @@ export default function DemoPage() {
 
         {/* --- Layout: Chat links, Info rechts --- */}
         <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,2fr),minmax(0,1fr)]">
-
           {/* --- Chatfenster --- */}
           <section className="rounded-2xl border border-slate-200 bg-white shadow-md">
             <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
@@ -135,13 +131,19 @@ export default function DemoPage() {
                     }`}
                   >
                     <div
-                      className={`max-w-[80%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm ${
+                      className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
                         m.role === "user"
                           ? "bg-emerald-500 text-white"
                           : "bg-slate-100 text-slate-900"
                       }`}
                     >
-                      {m.text}
+                      {m.role === "assistant" ? (
+                        <ReactMarkdown className="leading-relaxed whitespace-pre-wrap">
+                          {m.text}
+                        </ReactMarkdown>
+                      ) : (
+                        <span className="whitespace-pre-wrap">{m.text}</span>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -159,7 +161,12 @@ export default function DemoPage() {
                   <input
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={handleKeyDown}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        send();
+                      }
+                    }}
                     placeholder="Frage eingeben…"
                     className="flex-1 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none"
                   />
