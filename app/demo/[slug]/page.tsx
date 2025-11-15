@@ -3,24 +3,35 @@
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
+// Kleiner Wrapper, damit TypeScript nicht meckert
+const Markdown = ReactMarkdown as unknown as React.FC<{
+  children: string;
+  className?: string;
+}>;
+
 
 type Message = { role: "user" | "assistant"; text: string };
 
-/* --- Mapping: Slug → Praxisname --- */
+/**
+ * Mapping: Slug → Anzeigename der Praxis
+ * Hier kannst du für jeden Kunden einen Eintrag ergänzen.
+ */
 const TENANT_LABELS: Record<string, string> = {
   "hausarzt-painten": "Praxis Dr. Kopfmüller",
 
-  // 👇 weitere Kunden einfach so ergänzen:
+  // Beispiel für weitere Kunden:
   // "praxis-muster": "Praxis Dr. Muster",
 };
 
-function getPracticeName(slug: string | undefined) {
+function getPracticeName(slug: string | undefined): string {
   if (!slug) return "Ihrer Praxis";
   return TENANT_LABELS[slug] ?? "Ihrer Praxis";
 }
 
 export default function DemoPage() {
-  const { slug } = useParams<{ slug: string }>();
+  // params.slug ist in Next optional → deshalb das ? in der Typdefinition
+  const params = useParams<{ slug?: string }>();
+  const slug = params.slug;
   const practiceName = getPracticeName(slug);
 
   const [input, setInput] = useState("");
@@ -30,6 +41,19 @@ export default function DemoPage() {
   async function send() {
     const q = input.trim();
     if (!q || isSending) return;
+
+    // wenn aus irgendeinem Grund kein Slug vorhanden ist:
+    if (!slug) {
+      setMessages((m) => [
+        ...m,
+        {
+          role: "assistant",
+          text:
+            "Es liegt ein Konfigurationsfehler vor: kein Praxis-Slug gesetzt.",
+        },
+      ]);
+      return;
+    }
 
     setInput("");
     setMessages((m) => [...m, { role: "user", text: q }]);
@@ -114,12 +138,12 @@ export default function DemoPage() {
             </div>
 
             <div className="flex h-[70vh] flex-col">
-              {/* Nachrichten */}
+              {/* Nachrichtenbereich */}
               <div className="flex-1 space-y-3 overflow-y-auto px-4 py-3">
                 {messages.length === 0 && (
                   <p className="text-sm text-slate-500">
                     Stellen Sie eine Frage zur Praxis (Öffnungszeiten,
-                    Leistungen, Kontakt, Rezepte …)
+                    Leistungen, Kontakt, Rezepte …).
                   </p>
                 )}
 
@@ -138,18 +162,19 @@ export default function DemoPage() {
                       }`}
                     >
                       {m.role === "assistant" ? (
-                        <ReactMarkdown className="leading-relaxed whitespace-pre-wrap">
-                          {m.text}
-                        </ReactMarkdown>
-                      ) : (
-                        <span className="whitespace-pre-wrap">{m.text}</span>
-                      )}
+  <Markdown className="whitespace-pre-wrap leading-relaxed">
+    {m.text}
+  </Markdown>
+) : (
+  <span className="whitespace-pre-wrap">{m.text}</span>
+)}
+
                     </div>
                   </div>
                 ))}
               </div>
 
-              {/* Eingabe */}
+              {/* Eingabebereich */}
               <div className="border-t border-slate-200 px-4 py-3">
                 <form
                   className="flex gap-2"
