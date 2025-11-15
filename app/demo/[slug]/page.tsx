@@ -159,23 +159,24 @@ export default function DemoPage() {
                         <Markdown
                           className="whitespace-pre-wrap leading-relaxed"
                           components={{
-                            ul: ({ children }: any) => (
-                              <ul className="list-disc ml-4 space-y-1">
-                                {children}
-                              </ul>
-                            ),
-                            ol: ({ children }: any) => (
-                              <ol className="list-decimal ml-4 space-y-1">
-                                {children}
-                              </ol>
-                            ),
-                            li: ({ children }: any) => (
-                              <li className="ml-1">{children}</li>
-                            ),
-                            p: ({ children }: any) => (
-                              <p className="mb-1">{children}</p>
-                            ),
-                          }}
+  ul: ({ children }: any) => (
+    <ul className="list-disc ml-4 space-y-2">
+      {children}
+    </ul>
+  ),
+  ol: ({ children }: any) => (
+    <ol className="list-decimal ml-4 space-y-2">
+      {children}
+    </ol>
+  ),
+  li: ({ children }: any) => (
+    <li className="ml-1 leading-relaxed">{children}</li>
+  ),
+  p: ({ children }: any) => (
+    <p className="mb-2 leading-relaxed">{children}</p>
+  ),
+}}
+
                         >
                           {m.text}
                         </Markdown>
