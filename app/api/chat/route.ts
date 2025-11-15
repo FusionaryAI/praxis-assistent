@@ -14,8 +14,8 @@ function checkEmergency(t: string) {
     "suizid",
     "vergiftung",
     "schlaganfall",
-    "herzinfarkt"
-  ].some(k => x.includes(k));
+    "herzinfarkt",
+  ].some((k) => x.includes(k));
 }
 
 function needsMedicalAdviceBlock(t: string) {
@@ -25,8 +25,8 @@ function needsMedicalAdviceBlock(t: string) {
     "medikament",
     "dosierung",
     "antibiotikum",
-    "behandlung"
-  ].some(k => x.includes(k));
+    "behandlung",
+  ].some((k) => x.includes(k));
 }
 
 const EMERGENCY_MSG =
@@ -58,7 +58,7 @@ async function getTenantVariables(tenant_id: string) {
   return data!.variables as any;
 }
 
-// --- Improved System Prompt ---
+// --- System Prompt: weniger Bullet-Spam ---
 function systemPrompt(vars: any) {
   return `Rolle:
 Sie sind der digitale Praxis-Assistent der ${vars.Praxisname} in ${vars.Ort}.
@@ -67,41 +67,56 @@ WICHTIGE REGELN:
 
 - Keine Diagnosen oder Therapieempfehlungen geben.
 - In Notfällen: 112, außerhalb der Sprechzeiten: 116 117.
-- Antworten immer direkt auf die Frage, **ohne Begrüßungs- oder Abschlussformeln**.
+- Antworten immer direkt auf die Frage, ohne Begrüßung oder Abschlussformeln.
 - Höflicher Ton, Sie-Form.
-- Kurze, übersichtliche Absätze.
-- **Wenn Listen notwendig sind, IMMER Markdown-Bullets verwenden ("- ").**
-- Maximal **5–7 Beispielpunkte** pro Aufzählung, nicht alle Leistungen auflisten.
-- Keine Sternchenformatierung (**Text**), nur klare Markdown-Listen.
-- Öffnungszeiten ebenfalls als Liste:
-  - Montag: 08:00–12:00 …
-- Bei fehlenden Infos ehrlich sein und auf die Praxis verweisen (Telefon: ${vars.Kontakt_Tel}).
+- Kurze, übersichtliche Absätze. Standard ist normaler Fließtext.
+
+FORMATIERUNG:
+
+- Standard: Antworten Sie in normalem Fließtext mit kurzen Absätzen.
+- Verwenden Sie Markdown-Listen mit "- " nur dann, wenn Sie mehrere eigenständige Punkte aufzählen:
+  - z. B. Leistungen, Öffnungszeiten, Schritte, Voraussetzungen, verschiedene Optionen
+- Nutzen Sie pro Liste höchstens 5–7 Bulletpoints.
+- Erfinden Sie keine Listen, wenn ein normaler Satz ausreicht.
+- Keine Sternchenformatierung (**Text**), nur klare Absätze und ggf. Listen.
+
+ÖFFNUNGSZEITEN:
+
+- Öffnungszeiten nach Möglichkeit als Liste:
+  - Montag: 08:00–12:00, 16:00–17:00
+  - Dienstag: ...
+- Wenn nur eine einzelne Zeit genannt wird, genügt ein normaler Satz.
+
+UMGANG MIT FEHLENDEN INFORMATIONEN:
+
+- Wenn Informationen in den Praxisdaten nicht vorhanden sind, sagen Sie das offen.
+- Verweisen Sie dann auf die Kontaktmöglichkeit der Praxis und nennen Sie die Telefonnummer ${vars.Kontakt_Tel}.
 
 TERMINANFRAGEN:
-Fragen Sie strukturiert nach:
-- vollständigem Namen  
-- Geburtsdatum (TT.MM.JJJJ)  
-- Telefonnummer  
-- Anliegen  
-- bevorzugtem Zeitraum  
-- Einverständnis zur Weitergabe  
 
-Antwortzeit der Praxis: ${vars.Antwortzeit}.
-`;
+- Wenn jemand einen Termin möchte, fragen Sie strukturiert nach:
+  - vollständigem Namen
+  - Geburtsdatum (TT.MM.JJJJ)
+  - Telefonnummer
+  - kurzem Anliegen
+  - bevorzugtem Zeitraum
+  - Einverständnis zur Weitergabe
+
+Antwortzeit der Praxis: ${vars.Antwortzeit}.`;
 }
 
 // --- RAG Search ---
 async function ragSearch(tenant_id: string, query: string, k = 4) {
   const emb = await openai.embeddings.create({
     model: "text-embedding-3-large",
-    input: query
+    input: query,
   });
   const q = emb.data[0].embedding;
 
   const { data, error } = await supaAdmin.rpc("match_embeddings", {
     query_embedding: q,
     match_count: k,
-    p_tenant_id: tenant_id
+    p_tenant_id: tenant_id,
   });
 
   if (error) throw error;
@@ -115,11 +130,12 @@ export async function POST(req: NextRequest) {
       message: string;
     };
 
-    if (!slug || !message)
+    if (!slug || !message) {
       return NextResponse.json(
         { error: "slug & message required" },
-        { status: 400 }
+        { status: 400 },
       );
+    }
 
     const tenant = await getTenantBySlug(slug);
     const vars = await getTenantVariables(tenant.id);
@@ -127,21 +143,20 @@ export async function POST(req: NextRequest) {
     // --- Guardrails First ---
     if (checkEmergency(message)) {
       return NextResponse.json({
-        text: `${EMERGENCY_MSG}\n\nWie kann ich organisatorisch helfen (Termin, Öffnungszeiten, Kontakt)?`
+        text: `${EMERGENCY_MSG}\n\nWie kann ich organisatorisch helfen (Termin, Öffnungszeiten, Kontakt)?`,
       });
     }
 
     if (needsMedicalAdviceBlock(message)) {
       return NextResponse.json({
-        text: `${MEDICAL_BLOCK_MSG} Möchten Sie eine Terminanfrage stellen?`
+        text: `${MEDICAL_BLOCK_MSG} Möchten Sie eine Terminanfrage stellen?`,
       });
     }
 
     // --- RAG Retrieval ---
     const matches = await ragSearch(tenant.id, message, 4);
-    const kb = matches.map(m => `- ${m.content}`).join("\n");
+    const kb = matches.map((m) => `- ${m.content}`).join("\n");
 
-    // --- Build Prompts ---
     const system = systemPrompt(vars);
 
     const completion = await openai.chat.completions.create({
@@ -151,20 +166,22 @@ export async function POST(req: NextRequest) {
         { role: "system", content: system },
         {
           role: "user",
-          content: `Nutzerfrage:\n"""${message}"""\n
-Praxiswissen (Stichpunkte):\n${kb}
+          content: `Nutzerfrage:
+"""${message}"""
 
-Bitte antworte im **Markdown-Format**, mit folgenden Vorgaben:
+Praxiswissen (Stichpunkte / Textauszüge):
+${kb}
 
-- Keine Begrüßung wie "Sehr geehrte Damen und Herren".
-- Keine Grußformeln wie "Mit freundlichen Grüßen".
-- Wenn Leistungen oder Beispiele genannt werden: **max. 5–7 Markdown-Bullets**.
-- Jede Zeile einer Liste MUSS mit "- " beginnen.
-- Keine Sternchenformatierungen.
-- Kurze, klare, übersichtliche Antwort im Chat-Stil.
-`
-        }
-      ]
+Formatiere deine Antwort wie folgt:
+
+- Standard ist normaler Fließtext mit kurzen Absätzen.
+- Nutze eine kurze Markdown-Liste mit "- " nur, wenn die Frage nach mehreren Leistungen, Öffnungszeiten, Vorteilen, Schritten oder ähnlichen Aufzählungen fragt oder wenn mehrere Punkte klar getrennt dargestellt werden sollen.
+- Verwende pro Liste höchstens 5–7 Bulletpoints.
+- Wenn es nur ein einzelner Hinweis oder eine kurze Erklärung ist, nutze keinen Listenpunkt, sondern normalen Text.
+- Keine Begrüßung, kein Gruß, sachlicher Chat-Stil.
+`,
+        },
+      ],
     });
 
     const text =
@@ -175,7 +192,7 @@ Bitte antworte im **Markdown-Format**, mit folgenden Vorgaben:
   } catch (e: any) {
     return NextResponse.json(
       { ok: false, error: e?.message ?? "server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
