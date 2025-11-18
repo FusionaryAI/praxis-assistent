@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 type ChatMessage = {
   role: "user" | "assistant";
   text: string;
 };
 
-export default function Embed({ params }: { params: { slug: string } }) {
+export default function EmbedPage({ params }: { params: { slug: string } }) {
   const slug = params?.slug;
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -19,7 +19,7 @@ export default function Embed({ params }: { params: { slug: string } }) {
   async function send() {
     const q = input.trim();
 
-    // nichts senden, wenn kein Text oder kein Slug oder gerade am Senden
+    // nichts senden, wenn kein Text, kein Slug oder gerade am Senden
     if (!q || !slug || isSending) return;
 
     setInput("");
@@ -39,8 +39,8 @@ export default function Embed({ params }: { params: { slug: string } }) {
       let data: any = null;
       try {
         data = await res.json();
-      } catch {
-        // JSON-Parse-Fehler ignorieren, wir zeigen eine generische Antwort
+      } catch (err) {
+        console.error("Fehler beim Lesen der Antwort:", err);
       }
 
       if (!res.ok) {
@@ -61,6 +61,7 @@ export default function Embed({ params }: { params: { slug: string } }) {
 
       setMessages((m) => [...m, { role: "assistant", text: answer }]);
     } catch (err) {
+      console.error("Chat-Anfrage fehlgeschlagen:", err);
       setMessages((m) => [
         ...m,
         {
@@ -74,7 +75,7 @@ export default function Embed({ params }: { params: { slug: string } }) {
     }
   }
 
-  // Nach jeder neuen Nachricht nach unten scrollen
+  // nach jeder neuen Nachricht nach unten scrollen
   useEffect(() => {
     if (!boxRef.current) return;
     boxRef.current.scrollTop = boxRef.current.scrollHeight;
@@ -135,3 +136,4 @@ export default function Embed({ params }: { params: { slug: string } }) {
     </div>
   );
 }
+
