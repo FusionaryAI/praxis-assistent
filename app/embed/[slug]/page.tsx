@@ -19,8 +19,31 @@ export default function EmbedPage({ params }: { params: { slug: string } }) {
   async function send() {
     const q = input.trim();
 
-    // nichts senden, wenn kein Text, kein Slug oder gerade am Senden
-    if (!q || !slug || isSending) return;
+    // 🔍 Debug-Log: sehen wir überhaupt den Klick / Enter?
+    console.log("SEND KLICK", { q, slug, isSending });
+
+    // Debug: NICHT mehr früh returnen, damit wir den Log immer sehen
+    // if (!q || !slug || isSending) return;
+
+    if (!q) {
+      // kleine Rückmeldung im Chat, damit du siehst, dass send() läuft
+      setMessages((m) => [
+        ...m,
+        { role: "assistant", text: "Bitte geben Sie eine Frage ein." },
+      ]);
+      return;
+    }
+    if (!slug) {
+      setMessages((m) => [
+        ...m,
+        {
+          role: "assistant",
+          text: "Technischer Fehler: Kein Mandanten-Slug vorhanden.",
+        },
+      ]);
+      return;
+    }
+    if (isSending) return;
 
     setInput("");
     setMessages((m) => [...m, { role: "user", text: q }]);
@@ -75,7 +98,6 @@ export default function EmbedPage({ params }: { params: { slug: string } }) {
     }
   }
 
-  // nach jeder neuen Nachricht nach unten scrollen
   useEffect(() => {
     if (!boxRef.current) return;
     boxRef.current.scrollTop = boxRef.current.scrollHeight;
@@ -84,7 +106,7 @@ export default function EmbedPage({ params }: { params: { slug: string } }) {
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      if (!isSending) send();
+      send();
     }
   }
 
@@ -123,17 +145,15 @@ export default function EmbedPage({ params }: { params: { slug: string } }) {
           onKeyDown={handleKeyDown}
           placeholder="Frage eingeben…"
           className="flex-1 rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          disabled={isSending}
         />
         <button
+          // 🔍 hier KEIN disabled mehr – immer klickbar
           onClick={send}
-          disabled={isSending || !input.trim()}
-          className="rounded-xl bg-blue-600 text-white px-4 py-2 text-sm font-semibold disabled:opacity-60 disabled:cursor-not-allowed"
+          className="rounded-xl bg-blue-600 text-white px-4 py-2 text-sm font-semibold"
         >
-          {isSending ? "Senden…" : "Senden"}
+          Senden
         </button>
       </div>
     </div>
   );
 }
-
