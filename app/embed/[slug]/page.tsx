@@ -1,114 +1,42 @@
 "use client";
+import { useEffect, useRef, useState } from "react";
 
-import React, { useEffect, useRef, useState } from "react";
-
-type ChatMessage = {
-  role: "user" | "assistant";
-  text: string;
-};
-
-export default function EmbedPage({ params }: { params: { slug: string } }) {
-  const slug = params?.slug;
+export default function Embed({ params }: { params: { slug: string } }) {
+  const slug = params.slug;
   const [input, setInput] = useState("");
-  const [messages, setMessages] = useState<ChatMessage[]>([
+  const [messages, setMessages] = useState<{ role: "user" | "assistant"; text: string }[]>([
     { role: "assistant", text: "Hallo! Wie kann ich Ihnen helfen?" },
   ]);
-  const [isSending, setIsSending] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
 
   async function send() {
     const q = input.trim();
-
-    // 🔍 Debug-Log: sehen wir überhaupt den Klick / Enter?
-    console.log("SEND KLICK", { q, slug, isSending });
-
-    // Debug: NICHT mehr früh returnen, damit wir den Log immer sehen
-    // if (!q || !slug || isSending) return;
-
-    if (!q) {
-      // kleine Rückmeldung im Chat, damit du siehst, dass send() läuft
-      setMessages((m) => [
-        ...m,
-        { role: "assistant", text: "Bitte geben Sie eine Frage ein." },
-      ]);
-      return;
-    }
-    if (!slug) {
-      setMessages((m) => [
-        ...m,
-        {
-          role: "assistant",
-          text: "Technischer Fehler: Kein Mandanten-Slug vorhanden.",
-        },
-      ]);
-      return;
-    }
-    if (isSending) return;
-
+    if (!q) return;
     setInput("");
     setMessages((m) => [...m, { role: "user", text: q }]);
-    setIsSending(true);
 
-    try {
-      const res = await fetch("/api/chat", {
+    const res = await fetch(
+      `/api/chat?slug=${encodeURIComponent(slug)}`,
+      {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slug, message: q }),
-      });
-
-      let answer =
-        "Entschuldigung, ich kann dazu gerade keine Auskunft geben.";
-
-      let data: any = null;
-      try {
-        data = await res.json();
-      } catch (err) {
-        console.error("Fehler beim Lesen der Antwort:", err);
+        // Im Body brauchen wir nur die Nachricht, den Slug schicken wir über die URL
+        body: JSON.stringify({ message: q }),
       }
+    );
 
-      if (!res.ok) {
-        if (data?.error) {
-          answer =
-            "Es ist ein Fehler aufgetreten: " +
-            String(data.error) +
-            " (Slug: " +
-            slug +
-            ")";
-        } else {
-          answer =
-            "Es ist ein Fehler aufgetreten (Status " + res.status + ").";
-        }
-      } else if (data?.text) {
-        answer = data.text;
-      }
-
-      setMessages((m) => [...m, { role: "assistant", text: answer }]);
-    } catch (err) {
-      console.error("Chat-Anfrage fehlgeschlagen:", err);
-      setMessages((m) => [
-        ...m,
-        {
-          role: "assistant",
-          text:
-            "Es ist ein technischer Fehler aufgetreten. Bitte versuchen Sie es später erneut.",
-        },
-      ]);
-    } finally {
-      setIsSending(false);
-    }
+    const data = await res.json();
+    setMessages((m) => [
+      ...m,
+      { role: "assistant", text: data.text ?? "…" },
+    ]);
   }
 
+  // iFrame passt Höhe automatisch an
   useEffect(() => {
-    if (!boxRef.current) return;
-    boxRef.current.scrollTop = boxRef.current.scrollHeight;
+    const h = boxRef.current?.scrollHeight ?? 500;
+    window.parent.postMessage({ type: "__widget_height__", height: h }, "*");
   }, [messages]);
-
-  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      send();
-    }
-  }
 
   return (
     <div className="min-h-[420px] w-[360px] max-w-full bg-white text-gray-900 flex flex-col rounded-2xl shadow-xl border overflow-hidden">
@@ -116,17 +44,11 @@ export default function EmbedPage({ params }: { params: { slug: string } }) {
         Praxis-Assistent
       </div>
 
-      <div
-        ref={boxRef}
-        className="flex-1 p-3 space-y-3 overflow-y-auto bg-white"
-      >
+      <div ref={boxRef} className="flex-1 p-3 space-y-3 overflow-y-auto">
         {messages.map((m, i) => (
-          <div
-            key={i}
-            className={m.role === "user" ? "text-right" : "text-left"}
-          >
+          <div key={i} className={m.role === "user" ? "text-right" : "text-left"}>
             <div
-              className={`inline-block px-3 py-2 rounded-2xl text-sm leading-relaxed ${
+              className={`inline-block px-3 py-2 rounded-2xl ${
                 m.role === "user"
                   ? "bg-blue-600 text-white"
                   : "bg-gray-100 text-gray-900"
@@ -138,18 +60,17 @@ export default function EmbedPage({ params }: { params: { slug: string } }) {
         ))}
       </div>
 
-      <div className="p-2 flex gap-2 border-t bg-white">
+      <div className="p-2 flex gap-2 border-t">
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
+          onKeyDown={(e) => e.key === "Enter" && send()}
           placeholder="Frage eingeben…"
-          className="flex-1 rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          className="flex-1 rounded-xl border px-3 py-2"
         />
         <button
-          // 🔍 hier KEIN disabled mehr – immer klickbar
           onClick={send}
-          className="rounded-xl bg-blue-600 text-white px-4 py-2 text-sm font-semibold"
+          className="rounded-xl bg-blue-600 text-white px-4"
         >
           Senden
         </button>

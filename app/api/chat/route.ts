@@ -123,14 +123,12 @@ async function ragSearch(tenant_id: string, query: string, k = 4) {
   return data as { id: string; content: string; distance: number }[];
 }
 
-// --- Hilfsfunktion: Slug aus Referer-URL ziehen (für iFrame-Embed) ---
+// optionaler Fallback über Referer (zusätzlich)
 function slugFromReferer(req: NextRequest): string | null {
   const ref = req.headers.get("referer") || "";
   if (!ref) return null;
-
   try {
     const url = new URL(ref);
-    // z.B. /embed/hausarzt-painten oder /demo/hausarzt-painten
     const match =
       url.pathname.match(/\/embed\/([^/]+)/) ||
       url.pathname.match(/\/demo\/([^/]+)/);
@@ -142,13 +140,17 @@ function slugFromReferer(req: NextRequest): string | null {
 
 export async function POST(req: NextRequest) {
   try {
-    // Body robuster lesen (kann bei manchen Embeds leer sein)
     const body = (await req.json().catch(() => ({}))) as {
       slug?: string;
       message?: string;
     };
 
-    let { slug, message } = body;
+    const message = body.message;
+    let slug =
+      req.nextUrl.searchParams.get("slug") ??
+      body.slug ??
+      slugFromReferer(req) ??
+      undefined;
 
     if (!message) {
       return NextResponse.json(
@@ -157,13 +159,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 🔁 Fallback: Wenn kein slug im Body, versuche Referer
     if (!slug) {
-      slug = slugFromReferer(req) || undefined;
-    }
-
-    if (!slug) {
-      // Gleiche Fehlermeldung wie bisher, nur sauber aus API
       return NextResponse.json(
         { text: "Technischer Fehler: Kein Mandanten-Slug vorhanden." },
         { status: 500 },
