@@ -1,55 +1,91 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 
-export default function Embed({ params }: { params: { slug: string } }) {
-  const slug = params.slug;
-  const [input, setInput] = useState("");
-  const [messages, setMessages] = useState<
-    { role: "user" | "assistant"; text: string }[]
-  >([{ role: "assistant", text: "Hallo! Wie kann ich Ihnen helfen?" }]);
+type EmbedPageProps = {
+  params: {
+    slug: string;
+  };
+};
 
-  const boxRef = useRef<HTMLDivElement>(null);
+type ChatMessage = {
+  role: "user" | "assistant";
+  text: string;
+};
+
+export default function Embed({ params }: EmbedPageProps) {
+  const slug = params.slug;
+
+  const [input, setInput] = useState("");
+  const [sending, setSending] = useState(false);
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    { role: "assistant", text: "Hallo! Wie kann ich Ihnen helfen?" },
+  ]);
+
+  const boxRef = useRef<HTMLDivElement | null>(null);
 
   async function send() {
     const q = input.trim();
-    if (!q) return;
+    if (!q || sending) return;
+
     setInput("");
+    setSending(true);
     setMessages((m) => [...m, { role: "user", text: q }]);
 
-    const res = await fetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ slug, message: q }),
-    });
+    try {
+      const res = await fetch(`/api/chat?slug=${encodeURIComponent(slug)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: q }),
+      });
 
-    const data = await res.json();
-    setMessages((m) => [
-      ...m,
-      { role: "assistant", text: data.text ?? "…" },
-    ]);
+      const data = await res.json().catch(() => null);
+      const text =
+        (data && (data.text as string)) ??
+        "Entschuldigung, ich konnte gerade keine Antwort erzeugen.";
+
+      setMessages((m) => [...m, { role: "assistant", text }]);
+    } catch (_) {
+      setMessages((m) => [
+        ...m,
+        {
+          role: "assistant",
+          text:
+            "Es ist ein technischer Fehler aufgetreten. Bitte versuchen Sie es später erneut oder kontaktieren Sie die Praxis telefonisch.",
+        },
+      ]);
+    } finally {
+      setSending(false);
+    }
   }
 
-  // Höhe an Elternseite melden
+  // Scroll nach unten + Höhe an den Parent (IONOS) melden
   useEffect(() => {
-    const h = boxRef.current?.scrollHeight ?? 600;
-    window.parent.postMessage({ type: "__widget_height__", height: h }, "*");
-  }, [messages]);
+    if (!boxRef.current) return;
+    const el = boxRef.current;
+
+    // immer ganz nach unten scrollen
+    el.scrollTop = el.scrollHeight;
+
+    const height = el.scrollHeight + 120; // Input-Bereich grob einrechnen
+    try {
+      window.parent.postMessage(
+        { type: "__widget_height__", height },
+        "*"
+      );
+    } catch {
+      // ignore
+    }
+  }, [messages.length]);
 
   return (
-    <div
-      className="w-[360px] max-w-full bg-white text-gray-900 
-      flex flex-col rounded-2xl shadow-xl border border-gray-200 
-      overflow-hidden"
-    >
-      {/* Header */}
-      <div className="px-4 py-3 bg-white border-b border-gray-200 font-semibold text-lg">
+    <div className="min-h-[420px] w-[360px] max-w-full bg-white text-gray-900 flex flex-col rounded-2xl shadow-xl border border-gray-200 overflow-hidden">
+      <div className="px-4 py-3 border-b font-semibold text-gray-900">
         Praxis-Assistent
       </div>
 
-      {/* Chatbereich */}
       <div
         ref={boxRef}
-        className="flex-1 p-4 space-y-4 overflow-y-auto bg-white"
+        className="flex-1 p-3 space-y-3 overflow-y-auto bg-white"
       >
         {messages.map((m, i) => (
           <div
@@ -57,8 +93,7 @@ export default function Embed({ params }: { params: { slug: string } }) {
             className={m.role === "user" ? "text-right" : "text-left"}
           >
             <div
-              className={`inline-block px-4 py-2 rounded-2xl leading-relaxed
-              ${
+              className={`inline-block px-3 py-2 rounded-2xl text-sm leading-relaxed ${
                 m.role === "user"
                   ? "bg-blue-600 text-white"
                   : "bg-gray-100 text-gray-900"
@@ -70,20 +105,18 @@ export default function Embed({ params }: { params: { slug: string } }) {
         ))}
       </div>
 
-      {/* Eingabe */}
-      <div className="p-3 flex gap-2 border-t border-gray-200 bg-white">
+      <div className="p-2 flex gap-2 border-t bg-white">
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && send()}
           placeholder="Frage eingeben…"
-          className="flex-1 rounded-xl border border-gray-300 px-3 py-2
-          focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="flex-1 rounded-xl border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
         />
         <button
           onClick={send}
-          className="rounded-xl bg-blue-600 hover:bg-blue-700 
-          text-white px-5 py-2 font-medium transition"
+          disabled={sending || !input.trim()}
+          className="rounded-xl bg-blue-600 disabled:bg-blue-300 disabled:cursor-not-allowed text-white px-4 text-sm font-medium"
         >
           Senden
         </button>
