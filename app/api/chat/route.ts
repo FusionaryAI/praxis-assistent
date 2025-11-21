@@ -123,46 +123,38 @@ async function ragSearch(tenant_id: string, query: string, k = 4) {
   return data as { id: string; content: string; distance: number }[];
 }
 
-// optionaler Fallback über Referer (zusätzlich)
-function slugFromReferer(req: NextRequest): string | null {
-  const ref = req.headers.get("referer") || "";
-  if (!ref) return null;
-  try {
-    const url = new URL(ref);
-    const match =
-      url.pathname.match(/\/embed\/([^/]+)/) ||
-      url.pathname.match(/\/demo\/([^/]+)/);
-    return match ? decodeURIComponent(match[1]) : null;
-  } catch {
-    return null;
-  }
-}
-
 export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json().catch(() => ({}))) as {
-      slug?: string;
-      message?: string;
-    };
+    // ---- Body + URL auslesen ----
+    let body: any = {};
+    try {
+      body = await req.json();
+    } catch {
+      body = {};
+    }
 
-    const message = body.message;
-    let slug =
-      req.nextUrl.searchParams.get("slug") ??
-      body.slug ??
-      slugFromReferer(req) ??
-      undefined;
+    const url = new URL(req.url);
+
+    const message =
+      (body.message as string | undefined) ??
+      url.searchParams.get("message") ??
+      "";
+
+    // **hier wird der Slug robust ermittelt**
+    const slugFromBody = body.slug as string | undefined;
+    const slugFromQuery = url.searchParams.get("slug") ?? undefined;
+    const slugFromHeader = req.headers.get("x-tenant-slug") ?? undefined;
+
+    const slug =
+      slugFromBody ||
+      slugFromQuery ||
+      slugFromHeader ||
+      "hausarzt-painten"; // Fallback für diese Praxis
 
     if (!message) {
       return NextResponse.json(
         { error: "message required" },
-        { status: 400 },
-      );
-    }
-
-    if (!slug) {
-      return NextResponse.json(
-        { text: "Technischer Fehler: Kein Mandanten-Slug vorhanden." },
-        { status: 500 },
+        { status: 400 }
       );
     }
 
