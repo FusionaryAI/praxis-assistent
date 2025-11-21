@@ -1,99 +1,115 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
 
-type EmbedPageProps = {
-  params: {
-    slug: string;
-  };
-};
+import { useEffect, useRef, useState } from "react";
 
 type ChatMessage = {
   role: "user" | "assistant";
   text: string;
 };
 
+type EmbedPageProps = {
+  params: { slug: string };
+};
+
 export default function Embed({ params }: EmbedPageProps) {
-  const slug = params.slug;
+  // Slug aus der URL (App Router) + Fallback über Query-Parameter
+  const [slug, setSlug] = useState<string>(params.slug || "");
 
   const [input, setInput] = useState("");
-  const [sending, setSending] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
     { role: "assistant", text: "Hallo! Wie kann ich Ihnen helfen?" },
   ]);
 
   const boxRef = useRef<HTMLDivElement | null>(null);
 
+  // Fallback: falls params.slug aus irgendeinem Grund leer ist,
+  // probieren wir, ihn aus der URL (search params) zu holen.
+  useEffect(() => {
+    if (!slug && typeof window !== "undefined") {
+      const qSlug =
+        new URLSearchParams(window.location.search).get("slug") || "";
+      if (qSlug) {
+        setSlug(qSlug);
+      }
+    }
+  }, [slug]);
+
   async function send() {
     const q = input.trim();
-    if (!q || sending) return;
+    if (!q) return;
 
     setInput("");
-    setSending(true);
     setMessages((m) => [...m, { role: "user", text: q }]);
 
-    try {
-      const res = await fetch(`/api/chat?slug=${encodeURIComponent(slug)}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: q }),
-      });
-
-      const data = await res.json().catch(() => null);
-      const text =
-        (data && (data.text as string)) ??
-        "Entschuldigung, ich konnte gerade keine Antwort erzeugen.";
-
-      setMessages((m) => [...m, { role: "assistant", text }]);
-    } catch (_) {
+    // Wenn slug fehlt, direkt eine verständliche Fehlermeldung anzeigen
+    if (!slug) {
       setMessages((m) => [
         ...m,
         {
           role: "assistant",
           text:
-            "Es ist ein technischer Fehler aufgetreten. Bitte versuchen Sie es später erneut oder kontaktieren Sie die Praxis telefonisch.",
+            "Technischer Hinweis: Für diesen Chat ist kein Praxis-Mandant (Slug) hinterlegt.",
         },
       ]);
-    } finally {
-      setSending(false);
+      return;
+    }
+
+    try {
+      const payload = { slug, message: q };
+
+      console.log("→ Sende an /api/chat", payload);
+
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data: any = await res.json();
+
+      console.log("← Antwort von /api/chat", res.status, data);
+
+      const answer =
+        data.text ??
+        data.error ??
+        "Entschuldigung, ich konnte gerade keine Antwort erzeugen.";
+
+      setMessages((m) => [...m, { role: "assistant", text: answer }]);
+    } catch (e: any) {
+      console.error("Chat-Fehler", e);
+      setMessages((m) => [
+        ...m,
+        {
+          role: "assistant",
+          text:
+            "Entschuldigung, es ist ein technischer Fehler aufgetreten. Bitte versuchen Sie es später erneut.",
+        },
+      ]);
     }
   }
 
-  // Scroll nach unten + Höhe an den Parent (IONOS) melden
+  // Höhe an das Iframe melden (für das Widget auf der Kundenseite)
   useEffect(() => {
-    if (!boxRef.current) return;
-    const el = boxRef.current;
-
-    // immer ganz nach unten scrollen
-    el.scrollTop = el.scrollHeight;
-
-    const height = el.scrollHeight + 120; // Input-Bereich grob einrechnen
-    try {
+    const h = boxRef.current?.scrollHeight ?? 500;
+    if (typeof window !== "undefined" && window.parent) {
       window.parent.postMessage(
-        { type: "__widget_height__", height },
-        "*"
+        { type: "__widget_height__", height: h },
+        "*",
       );
-    } catch {
-      // ignore
     }
-  }, [messages.length]);
+  }, [messages]);
 
   return (
-    <div className="min-h-[420px] w-[360px] max-w-full bg-white text-gray-900 flex flex-col rounded-2xl shadow-xl border border-gray-200 overflow-hidden">
-      <div className="px-4 py-3 border-b font-semibold text-gray-900">
+    <div className="min-h-[420px] w-[360px] max-w-full bg-white text-gray-900 flex flex-col rounded-2xl shadow-xl border overflow-hidden">
+      <div className="px-4 py-3 bg-gray-100 border-b font-semibold">
         Praxis-Assistent
       </div>
 
-      <div
-        ref={boxRef}
-        className="flex-1 p-3 space-y-3 overflow-y-auto bg-white"
-      >
+      <div ref={boxRef} className="flex-1 p-3 space-y-3 overflow-y-auto">
         {messages.map((m, i) => (
-          <div
-            key={i}
-            className={m.role === "user" ? "text-right" : "text-left"}
-          >
+          <div key={i} className={m.role === "user" ? "text-right" : "text-left"}>
             <div
-              className={`inline-block px-3 py-2 rounded-2xl text-sm leading-relaxed ${
+              className={`inline-block px-3 py-2 rounded-2xl ${
                 m.role === "user"
                   ? "bg-blue-600 text-white"
                   : "bg-gray-100 text-gray-900"
@@ -105,18 +121,17 @@ export default function Embed({ params }: EmbedPageProps) {
         ))}
       </div>
 
-      <div className="p-2 flex gap-2 border-t bg-white">
+      <div className="p-2 flex gap-2 border-t">
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && send()}
           placeholder="Frage eingeben…"
-          className="flex-1 rounded-xl border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          className="flex-1 rounded-xl border px-3 py-2"
         />
         <button
           onClick={send}
-          disabled={sending || !input.trim()}
-          className="rounded-xl bg-blue-600 disabled:bg-blue-300 disabled:cursor-not-allowed text-white px-4 text-sm font-medium"
+          className="rounded-xl bg-blue-600 text-white px-4"
         >
           Senden
         </button>
