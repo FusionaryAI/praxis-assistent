@@ -2,37 +2,25 @@
 
 import { useEffect, useRef, useState } from "react";
 
-type ChatMessage = {
+type Message = {
   role: "user" | "assistant";
   text: string;
 };
 
-type EmbedPageProps = {
+type EmbedProps = {
   params: { slug: string };
 };
 
-export default function Embed({ params }: EmbedPageProps) {
-  // Slug aus der URL (App Router) + Fallback über Query-Parameter
-  const [slug, setSlug] = useState<string>(params.slug || "");
+export default function Embed({ params }: EmbedProps) {
+  // Slug kommt immer aus der Route /embed/[slug]
+  const slug = params.slug;
 
   const [input, setInput] = useState("");
-  const [messages, setMessages] = useState<ChatMessage[]>([
+  const [messages, setMessages] = useState<Message[]>([
     { role: "assistant", text: "Hallo! Wie kann ich Ihnen helfen?" },
   ]);
 
   const boxRef = useRef<HTMLDivElement | null>(null);
-
-  // Fallback: falls params.slug aus irgendeinem Grund leer ist,
-  // probieren wir, ihn aus der URL (search params) zu holen.
-  useEffect(() => {
-    if (!slug && typeof window !== "undefined") {
-      const qSlug =
-        new URLSearchParams(window.location.search).get("slug") || "";
-      if (qSlug) {
-        setSlug(qSlug);
-      }
-    }
-  }, [slug]);
 
   async function send() {
     const q = input.trim();
@@ -41,75 +29,64 @@ export default function Embed({ params }: EmbedPageProps) {
     setInput("");
     setMessages((m) => [...m, { role: "user", text: q }]);
 
-    // Wenn slug fehlt, direkt eine verständliche Fehlermeldung anzeigen
-    if (!slug) {
-      setMessages((m) => [
-        ...m,
-        {
-          role: "assistant",
-          text:
-            "Technischer Hinweis: Für diesen Chat ist kein Praxis-Mandant (Slug) hinterlegt.",
-        },
-      ]);
-      return;
-    }
-
     try {
-      const payload = { slug, message: q };
-
-      console.log("→ Sende an /api/chat", payload);
-
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ slug, message: q }),
       });
 
-      const data: any = await res.json();
-
-      console.log("← Antwort von /api/chat", res.status, data);
-
+      const data = await res.json();
       const answer =
-        data.text ??
-        data.error ??
-        "Entschuldigung, ich konnte gerade keine Antwort erzeugen.";
+        typeof data?.text === "string"
+          ? data.text
+          : "Entschuldigung, ich konnte gerade keine Antwort erzeugen.";
 
       setMessages((m) => [...m, { role: "assistant", text: answer }]);
-    } catch (e: any) {
-      console.error("Chat-Fehler", e);
+    } catch (e) {
       setMessages((m) => [
         ...m,
         {
           role: "assistant",
           text:
-            "Entschuldigung, es ist ein technischer Fehler aufgetreten. Bitte versuchen Sie es später erneut.",
+            "Technischer Fehler: Die Anfrage konnte nicht verarbeitet werden.",
         },
       ]);
     }
   }
 
-  // Höhe an das Iframe melden (für das Widget auf der Kundenseite)
+  // Höhe an den Parent (Widget) melden – optional, schadet aber nicht
   useEffect(() => {
     const h = boxRef.current?.scrollHeight ?? 500;
-    if (typeof window !== "undefined" && window.parent) {
+    try {
       window.parent.postMessage(
         { type: "__widget_height__", height: h },
         "*",
       );
+    } catch {
+      // egal, wenn es fehlschlägt
     }
   }, [messages]);
 
   return (
-    <div className="min-h-[420px] w-[360px] max-w-full bg-white text-gray-900 flex flex-col rounded-2xl shadow-xl border overflow-hidden">
-      <div className="px-4 py-3 bg-gray-100 border-b font-semibold">
+    <div className="min-h-[420px] w-[360px] max-w-full bg-white text-gray-900 flex flex-col rounded-2xl border border-gray-200 shadow-xl overflow-hidden">
+      {/* Kopfzeile im iFrame */}
+      <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 text-sm font-semibold">
         Praxis-Assistent
       </div>
 
-      <div ref={boxRef} className="flex-1 p-3 space-y-3 overflow-y-auto">
+      {/* Chatbereich */}
+      <div
+        ref={boxRef}
+        className="flex-1 p-3 space-y-3 overflow-y-auto bg-white"
+      >
         {messages.map((m, i) => (
-          <div key={i} className={m.role === "user" ? "text-right" : "text-left"}>
+          <div
+            key={i}
+            className={m.role === "user" ? "text-right" : "text-left"}
+          >
             <div
-              className={`inline-block px-3 py-2 rounded-2xl ${
+              className={`inline-block px-3 py-2 rounded-2xl text-sm leading-relaxed ${
                 m.role === "user"
                   ? "bg-blue-600 text-white"
                   : "bg-gray-100 text-gray-900"
@@ -121,17 +98,18 @@ export default function Embed({ params }: EmbedPageProps) {
         ))}
       </div>
 
-      <div className="p-2 flex gap-2 border-t">
+      {/* Eingabebereich */}
+      <div className="p-2 flex gap-2 border-t border-gray-200 bg-gray-50">
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && send()}
           placeholder="Frage eingeben…"
-          className="flex-1 rounded-xl border px-3 py-2"
+          className="flex-1 rounded-xl border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
         />
         <button
           onClick={send}
-          className="rounded-xl bg-blue-600 text-white px-4"
+          className="rounded-xl bg-blue-600 text-white px-4 text-sm font-semibold hover:bg-blue-700 transition"
         >
           Senden
         </button>
